@@ -36,7 +36,7 @@ fn main() {
             match value.ping_time.elapsed() { //Check Elapsed time on the ping of each client.
                 Ok(elapsed) => {
                     if elapsed.as_secs() > 10 { //If over 10 secs since last PONG send a PING.
-                        response_bytes.extend([65,67,75,78].iter());
+                        response_bytes.extend([80,73,78,71].iter());
                         response_bytes.extend(value.callsign.iter());
                         socket.send_to(&response_bytes,value.socket_addr);
                         keep = true;
@@ -74,7 +74,7 @@ fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8],clients: &mut Has
                 pingged: true
             };
             clients.insert(addr,client); //Add client to hashmap
-            response_bytes.extend([65,67,75,78].iter()); //Add PING to response
+            response_bytes.extend([80,73,78,71].iter()); //Add PING to response
             response_bytes.extend(clients[&addr].callsign.iter()); //Add client callsign
             socket.send_to(&response_bytes,addr); //Send Ping
         },
