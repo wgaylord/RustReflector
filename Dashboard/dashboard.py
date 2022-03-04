@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler,HTTPServer,ThreadingHTTPServer
 import socket
 import requests
 import struct
+import ipaddress
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 m17_server_address = ('127.0.0.1', 17000)
@@ -48,9 +49,10 @@ class ClientHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", 'application/json')
             self.end_headers()
             clients = {}
-            for x in range(stats[0]):
-                callsign = decode_callsign_base40(stats[1+(7*x):7+(7*x)])
-                module = chr(stats[7+(7*x)])
+            data = stats[4:]
+            for x in range(stats[4]):
+                callsign = decode_callsign_base40(data[1+(7*x):7+(7*x)])
+                module = chr(data[7+(7*x)])
                 clients[callsign] = {"module":module,"talking":False}
 
             self.wfile.write(json.dumps(clients).encode("ASCII")) #Send history in JSOn format
@@ -59,13 +61,23 @@ class ClientHandler(BaseHTTPRequestHandler):
             
         if self.path == "/reflectors":
             reflectors = requests.get("https://reflectors.m17.link/ref-list/json").json()
-            new_reflectors = []
+            reflector_list = b''
+            reflector_list += struct.pack(">H",len(reflectors["items"]))
             for x in reflectors["items"]:
-                new_reflectors.append({"name":x["designator"],"ip":x["ipv4"],"port":x["port"]})
+                reflector_list += x["designator"].encode("ASCII")
+                if x["ipv4"] == None:
+                    reflector_list += b"\x00\x00\x00\x00"
+                else:
+                    reflector_list += ipaddress.ip_address(x["ipv4"]).packed
+                if x["ipv6"] == None:
+                    reflector_list += b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                else:
+                    reflector_list += ipaddress.ip_address(x["ipv6"]).packed
+                reflector_list += struct.pack(">H",int(x["port"]))
             self.send_response(200)
-            self.send_header("Content-type", 'application/json')
+            self.send_header("Content-type", 'application/octet-stream')
             self.end_headers()
-            self.wfile.write(json.dumps(new_reflectors).replace(" ","").encode("ASCII")) #Send history in JSOn format
+            self.wfile.write(reflector_list) #Send history in JSOn format
             self.server.path = self.path 
 
         
