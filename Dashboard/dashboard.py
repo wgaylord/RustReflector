@@ -53,7 +53,7 @@ class ClientHandler(BaseHTTPRequestHandler):
             for x in range(stats[4]):
                 callsign = decode_callsign_base40(data[1+(7*x):7+(7*x)])
                 module = chr(data[7+(7*x)])
-                clients[callsign] = {"module":module,"talking":False}
+                clients[callsign] = {"module":module,"talking":bool(data[8+(7*x)])}
 
             self.wfile.write(json.dumps(clients).encode("ASCII")) #Send history in JSOn format
             self.server.path = self.path 

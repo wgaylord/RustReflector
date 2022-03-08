@@ -10,6 +10,7 @@ struct Client {
     module: u8,
     ping_time: SystemTime,
     pingged: bool,
+    talking: bool,
 }
 
 impl Client {
@@ -24,7 +25,8 @@ impl Client {
         callsign: call,
         module: module,
         ping_time: SystemTime::now(),
-        pingged: true}
+        pingged: true,
+        talking: false}
     }
 }
 
@@ -74,7 +76,7 @@ fn main() {
 }
 
 
-fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8],clients: &mut HashMap::<SocketAddr,Client> ) {
+fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8;54],clients: &mut HashMap::<SocketAddr,Client> ) {
     let mut response_bytes = Vec::<u8>::new(); //Buffer for responses.
     match buf {
         [67,79,78,78, ..] => { //Handle CONN packets
@@ -103,10 +105,20 @@ fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8],clients: &mut Has
         },
         [77,49,55,32, ..] => { //Handle M17 packets
             //println!("M17");
+            match clients.get_mut(&addr){ //Get client from the hashmap
+                Some(client) => { //Client existed
+                    if (buf[36] & 0x80) == 0x80 {
+                        client.talking = false;
+                    }else{
+                        client.talking = true; //Set client to be talking.
+                    }
+                }
+                None => {println!("Unconnected client trying to talk?!");}
+            } 
             for (_key, value) in &*clients { //Loop over all the clients.
                 if !(value.socket_addr == addr) { // As long as its not the sender continue to next check.
                     if value.module == clients[&addr].module{ //Is the client we are looking at on the senders module?
-                        socket.send_to(&buf,value.socket_addr).expect("Error sending M17");//Send them the packet. (Should there be any packet rewriting here? Docs make this unclear.)
+                        socket.send_to(buf,value.socket_addr).expect("Error sending M17");//Send them the packet. (Should there be any packet rewriting here? Docs make this unclear.)
                     }
                 }
             }
@@ -114,10 +126,15 @@ fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8],clients: &mut Has
         [73,78,70,79, ..] => { //Handle INFO packets - NON STANDARD - Used for the dashboard to conmunicate to the reflector.
             //println!("INFO");
             response_bytes.extend([73,78,70,79]); //Add INFO to the response
-            response_bytes.push(clients.len() as u8); //Get number of clients and add to buffer !!!Hacky use of unwrap
+            response_bytes.push(clients.len() as u8); //Get number of clients and add to buffer 
             for (_key, value) in &*clients { //Loop over all the clients.
                 response_bytes.extend_from_slice(&value.callsign); //Send the 6 bytes for the callsign
                 response_bytes.push(value.module); //Send the single byte module
+                if value.talking{
+                    response_bytes.push(1);
+                }else{
+                    response_bytes.push(0);                
+                }
             }
             socket.send_to(&response_bytes,addr).expect("Error sending INFO");//Send the packet
         },

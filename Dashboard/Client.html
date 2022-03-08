@@ -16,9 +16,9 @@ function processStats(){ //Process new messages as they are fetched
     else{
 	var li = document.createElement('li');
 	li.textContent = name + " -> "+messages[name]["module"];
-    //if(messages[name]["talking"]){
-    //    li.textContent = li.textContent + " Talking..";
-    //}
+    if(messages[name]["talking"]){
+        li.textContent = li.textContent + " Talking..";
+    }
 	list.appendChild(li);
     };
     document.getElementById("groups").append(list);
