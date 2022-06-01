@@ -56,7 +56,7 @@ fn main() {
     let (tx,rx) = mpsc::channel(); //Get inter-thread communication.
     thread::spawn(|| {udp_thread(tx);});
     
-    let mut Client_list = Vec::<ClientInfo>::new();
+    let mut client_list = Vec::<ClientInfo>::new();
 
     let server = Server::http("0.0.0.0:3001").unwrap();
     loop{
@@ -65,16 +65,18 @@ fn main() {
 
             match request.url() {
                 "/" => {
-                request.respond(Response::from_file(fs::File::open("Client.html").expect("Error reading Client.html!")));
+                request.respond(Response::from_file(fs::File::open("Client.html").expect("Error reading Client.html!"))).expect("ERROR: Couldn't serve Client.html!");
                 }
                 "/status" => {
-                request.respond(Response::from_string(serde_json::to_string(&Client_list).expect("ERROR")));
+                request.respond(Response::from_string(serde_json::to_string(&client_list
+        ).expect("ERROR"))).expect("ERROR: Couldn't serve /status !");
                 }
                 _ => {}
             }
             match rx.try_recv(){
             Ok(clients) => {
-                Client_list = clients;
+                client_list
+         = clients;
                
             }
             _ => {}        
