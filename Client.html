@@ -2,7 +2,15 @@
     <head>
 <script>
 
-
+function decodeCallsign(data){
+    number = data[5]+(data[4]<<8)+(data[3]<<16)+(data[2]<<24)+(data[1]<<32)+(data[0]<<40);
+    callsign = "";
+    while(number > 0){
+        callsign += " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/."[number % 40];
+        number = Math.floor(number/40);
+    }
+    return callsign;
+}
 
 function processStats(){ //Process new messages as they are fetched
 
@@ -16,7 +24,7 @@ function processStats(){ //Process new messages as they are fetched
     }
     else{
 	var li = document.createElement('li');
-	li.textContent = name + " -> "+messages[name]["module"];
+	li.textContent = decodeCallsign(messages[name]["callsign"]) + " -> "+String.fromCharCode(messages[name]["module"]);
     if(messages[name]["talking"]){
         li.textContent = li.textContent + " Talking..";
     }

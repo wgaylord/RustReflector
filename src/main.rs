@@ -114,7 +114,7 @@ fn udp_thread(message_out: mpsc::Sender<Vec::<ClientInfo>>) {
                 let mut keep = true;
                 match value.ping_time.elapsed() { //Check Elapsed time on the ping of each client.
                     Ok(elapsed) => {
-                        if elapsed.as_secs() > 10 { //If over 10 secs since last PONG send a PING.
+                        if elapsed.as_secs() > 5 { //If over 5 secs since last PONG send a PING.
                             response_bytes.extend_from_slice(&[80,73,78,71]);
                             response_bytes.extend_from_slice(&value.callsign);
                             socket.send_to(&response_bytes,value.socket_addr).expect("Error sending PING");
