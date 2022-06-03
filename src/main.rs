@@ -2,6 +2,7 @@ use std::net::UdpSocket;
 use std::time::SystemTime;
 use std::net::SocketAddr;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::thread;
 use std::sync::mpsc;
 use std::fs;
@@ -98,13 +99,14 @@ fn udp_thread(message_out: mpsc::Sender<Vec::<ClientInfo>>) {
         let socket = UdpSocket::bind("0.0.0.0:17000").expect("couldn't bind to address"); //Get a UDP socket setup
         let mut buf = [0; 54]; //Buffer for holding packets. M17 IP packets are never longer then 54 bytes.
         let mut clients =  HashMap::<SocketAddr,Client>::new(); //Hashmap to hold Client Socket relations. 
+        let mut parrot =  HashMap::<SocketAddr,VecDeque::<[u8;54]>>::new(); //Hashmap to parrot data. 
         let mut response_bytes = Vec::<u8>::new(); //Holds the response to be sent.
 
         loop {
             let (_number_of_bytes, src_addr) = socket.recv_from(&mut buf).expect("Didn't receive data"); //Recv bytes from the socket.
             //If the message is to long for the buffer the extra bytes are dropped.
                                             
-            handle_packet(&socket,src_addr,&buf,&mut clients); //Call out packet handler. 
+            handle_packet(&socket,src_addr,&buf,&mut clients,&mut parrot); //Call out packet handler. 
             //Borrow out socket,buffer and client hashmap. Just give it the src_addr.
 
             clients.retain(|_key, value| { //Used for removing clients that timed out.
@@ -145,7 +147,7 @@ fn udp_thread(message_out: mpsc::Sender<Vec::<ClientInfo>>) {
 }
 
 
-fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8;54],clients: &mut HashMap::<SocketAddr,Client>) {
+fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8;54],clients: &mut HashMap::<SocketAddr,Client>,parrot: &mut HashMap::<SocketAddr,VecDeque::<[u8;54]>>) {
     let mut response_bytes = Vec::<u8>::new(); //Buffer for responses.
     match buf {
         [67,79,78,78, ..] => { //Handle CONN packets
@@ -179,18 +181,42 @@ fn handle_packet(socket: &UdpSocket,addr:SocketAddr,buf: &[u8;54],clients: &mut 
                 Some(client) => { //Client existed
                     if (buf[36] & 0x80) == 0x80 {
                         client.talking = false;
+                        if clients[&addr].module == 0x5a {
+                            match parrot.get_mut(&addr){ //Get client from the hashmap
+                                Some(voice_buffer) => { //Client existed
+                                    while !voice_buffer.is_empty(){
+                                        socket.send_to(&voice_buffer.pop_front().expect("Error getting voice from voice buffer in parrot"),addr).expect("Error sending M17");//Send them the packet. (Should there be any packet rewriting here? Docs make this unclear.)
+                                        
+                                    }
+                                    parrot.remove(&addr);
+                                }
+                                None => {}                                
+                            }
+                        }   
                     }else{
                         client.talking = true; //Set client to be talking.
                     }
                 }
                 None => {println!("Unconnected client trying to talk?!");}
             } 
-            for (_key, value) in &*clients { //Loop over all the clients.
-                if !(value.socket_addr == addr) { // As long as its not the sender continue to next check.
-                    if value.module == clients[&addr].module{ //Is the client we are looking at on the senders module?
-                        socket.send_to(buf,value.socket_addr).expect("Error sending M17");//Send them the packet. (Should there be any packet rewriting here? Docs make this unclear.)
+            if clients[&addr].module != 0x5a { //Only do this if not on module Z - the parrot module of this reflector imp
+                for (_key, value) in &*clients { //Loop over all the clients.
+                    if !(value.socket_addr == addr) { // As long as its not the sender continue to next check.
+                        if value.module == clients[&addr].module{ //Is the client we are looking at on the senders module?
+                            socket.send_to(buf,value.socket_addr).expect("Error sending M17");//Send them the packet. (Should there be any packet rewriting here? Docs make this unclear.)
+                        }
                     }
                 }
+            }else{
+                match parrot.get_mut(&addr){ //Get client from the hashmap
+                    Some(voice_buffer) => { //Client existed
+                            voice_buffer.push_back(buf.clone());
+                    }
+                    None => {
+                        let voice_buffer: VecDeque<[u8;54]> = VecDeque::with_capacity(250);
+                        parrot.insert(addr,voice_buffer);
+                    }
+                } 
             }
         },
         
